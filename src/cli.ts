@@ -4,7 +4,7 @@ import { lookupCompanyRegistration } from "./lib/registry.js";
 import { runDeepResearch } from "./lib/research.js";
 import { structureBrief, renderBriefMarkdown } from "./lib/brief.js";
 import { saveBrief } from "./lib/storage.js";
-import type { ResearchInput } from "./lib/types.js";
+import type { Brief, ResearchInput } from "./lib/types.js";
 
 function parseArgs(argv: string[]): Record<string, string> {
   const args: Record<string, string> = {};
@@ -24,13 +24,13 @@ function parseArgs(argv: string[]): Record<string, string> {
   return args;
 }
 
-async function researchOne(input: ResearchInput): Promise<void> {
+async function researchOne(input: ResearchInput): Promise<Brief> {
   console.log(`\n=== Researching: ${input.companyName} ===`);
 
   const registration = input.website ? await lookupCompanyRegistration(input.website) : null;
   if (registration) console.log(`Registration found: ${registration.type ?? "?"} ${registration.number ?? ""}`);
 
-  console.log("Running deep research (this can take 30-90s)...");
+  console.log("Running deep research (this can take 1-3 minutes)...");
   const { memo, model } = await runDeepResearch(input, registration, (delta) => process.stdout.write(delta));
   console.log(`\n\nResearch complete (model: ${model}). Structuring brief...`);
 
@@ -39,8 +39,9 @@ async function researchOne(input: ResearchInput): Promise<void> {
   const saved = await saveBrief(brief, markdown);
 
   console.log(`\nSaved brief: briefs/${saved.id}.md`);
-  console.log(`Confidence: ${brief.confidence}`);
-  console.log(`Opening line: ${brief.openingLine}`);
+  console.log(`Fit: ${brief.fit.level} | Confidence: ${brief.confidence}`);
+  console.log(`Opening line: ${brief.openingLines[0] ?? "(none)"}`);
+  return brief;
 }
 
 /** Minimal CSV parser: one row per line, columns "name,url,notes". No quoted-field support. */
@@ -60,13 +61,27 @@ async function main() {
     const text = await readFile(args.csv, "utf-8");
     const leads = parseCsv(text);
     console.log(`Loaded ${leads.length} leads from ${args.csv}`);
+    const results: { name: string; brief: Brief }[] = [];
     for (const lead of leads) {
       try {
-        await researchOne(lead);
+        results.push({ name: lead.companyName, brief: await researchOne(lead) });
       } catch (err) {
         console.error(`Failed to research "${lead.companyName}":`, (err as Error).message);
       }
     }
+
+    // Ranked call list: best fit + confidence first, so the rep knows whom to call first.
+    const rank = { strong: 0, high: 0, medium: 1, weak: 2, low: 2 } as const;
+    results.sort(
+      (a, b) =>
+        rank[a.brief.fit.level] - rank[b.brief.fit.level] ||
+        rank[a.brief.confidence] - rank[b.brief.confidence]
+    );
+    console.log("\n=== Ranked call list ===");
+    results.forEach((r, i) => {
+      const topSignal = r.brief.signals[0]?.title ?? "(no signals found)";
+      console.log(`${i + 1}. ${r.name} [fit: ${r.brief.fit.level}, confidence: ${r.brief.confidence}] - ${topSignal}`);
+    });
     return;
   }
 

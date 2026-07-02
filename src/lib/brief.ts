@@ -38,6 +38,8 @@ export async function structureBrief(
   // Prefer the pre-fetched registration lookup (structured, verified); fall back to whatever
   // the model may have found itself via web_fetch and reported in the memo.
   brief.company.registration = registration ?? brief.company.registration;
+  const strengthRank = { strong: 0, medium: 1, weak: 2 } as const;
+  brief.signals.sort((a, b) => strengthRank[a.strength] - strengthRank[b.strength]);
   return brief;
 }
 
@@ -65,9 +67,12 @@ export function renderBriefMarkdown(brief: Brief, researchedAt: string): string 
   lines.push("## Snapshot");
   lines.push(brief.summary);
   lines.push("");
-  lines.push("## Signals - why call now");
+  lines.push(`## Fit: ${brief.fit.level}`);
+  lines.push(brief.fit.rationale);
+  lines.push("");
+  lines.push("## Signals - why call now (strongest first)");
   brief.signals.forEach((s, i) => {
-    lines.push(`### ${i + 1}. ${s.title}`);
+    lines.push(`### ${i + 1}. ${s.title} [${s.strength}]`);
     lines.push(s.description);
     lines.push(`- **Why it matters for Exemplar:** ${s.whyForExemplar}`);
     lines.push(`- **Relevant service:** ${s.relevantService}`);
@@ -84,9 +89,8 @@ export function renderBriefMarkdown(brief: Brief, researchedAt: string): string 
     });
   }
   lines.push("");
-  lines.push("## Suggested opening line");
-  lines.push(`> ${brief.openingLine}`);
-  lines.push("");
+  lines.push("## Suggested opening lines");
+  brief.openingLines.forEach((line) => lines.push(`> ${line}`, ""));
   lines.push("## Follow-up questions");
   brief.followUpQuestions.forEach((q) => lines.push(`- ${q}`));
   lines.push("");

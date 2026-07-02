@@ -10,17 +10,23 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-function confidenceBadge(confidence) {
-  const colors = { high: "bg-green-100 text-green-800", medium: "bg-amber-100 text-amber-800", low: "bg-red-100 text-red-800" };
-  return `<span class="text-xs font-medium px-2 py-1 rounded ${colors[confidence] || ""}">${escapeHtml(confidence)}</span>`;
+function badge(value, label) {
+  const colors = {
+    high: "bg-green-100 text-green-800",
+    strong: "bg-green-100 text-green-800",
+    medium: "bg-amber-100 text-amber-800",
+    low: "bg-red-100 text-red-800",
+    weak: "bg-red-100 text-red-800",
+  };
+  return `<span class="text-xs font-medium px-2 py-1 rounded ${colors[value] || "bg-slate-100 text-slate-600"}">${escapeHtml(label ? `${label}: ${value}` : value)}</span>`;
 }
 
 function renderBrief(brief, markdown) {
   const signalsHtml = brief.signals
     .map(
       (s) => `
-      <div class="border-l-4 border-slate-300 pl-3 py-1 mb-3">
-        <p class="font-semibold">${escapeHtml(s.title)}</p>
+      <div class="border-l-4 ${s.strength === "strong" ? "border-green-400" : s.strength === "weak" ? "border-red-300" : "border-slate-300"} pl-3 py-1 mb-3">
+        <p class="font-semibold">${escapeHtml(s.title)} ${s.strength ? badge(s.strength) : ""}</p>
         <p class="text-sm text-slate-700">${escapeHtml(s.description)}</p>
         <p class="text-sm mt-1"><span class="font-medium">Hvorfor Exemplar:</span> ${escapeHtml(s.whyForExemplar)}</p>
         <p class="text-sm"><span class="font-medium">Relevant ydelse:</span> ${escapeHtml(s.relevantService)}</p>
@@ -54,24 +60,35 @@ function renderBrief(brief, markdown) {
       </p>`
     : "";
 
+  // Backward compatible with briefs saved before openingLines/fit were introduced.
+  const openingLines = brief.openingLines || (brief.openingLine ? [brief.openingLine] : []);
+  const openersHtml = openingLines
+    .map((line) => `<p class="italic border-l-4 border-slate-300 pl-3 mb-2">${escapeHtml(line)}</p>`)
+    .join("");
+
+  const fitHtml = brief.fit
+    ? `<p class="mb-4 text-sm"><span class="font-medium">Fit:</span> ${badge(brief.fit.level)} ${escapeHtml(brief.fit.rationale)}</p>`
+    : "";
+
   const blob = new Blob([markdown], { type: "text/markdown" });
   const downloadUrl = URL.createObjectURL(blob);
 
   resultEl.innerHTML = `
     <div class="flex justify-between items-start mb-2">
       <h2 class="text-xl font-bold">${escapeHtml(brief.company.name)}</h2>
-      ${confidenceBadge(brief.confidence)}
+      ${badge(brief.confidence, "confidence")}
     </div>
     <p class="text-sm text-slate-500 mb-1">${escapeHtml(brief.company.website || "")}</p>
     ${registrationHtml}
-    <p class="mb-4">${escapeHtml(brief.summary)}</p>
-    <h3 class="font-semibold mb-2">Signaler - grunde til at ringe nu</h3>
+    <p class="mb-2">${escapeHtml(brief.summary)}</p>
+    ${fitHtml}
+    <h3 class="font-semibold mb-2">Signaler - grunde til at ringe nu (stærkeste først)</h3>
     ${signalsHtml}
     <h3 class="font-semibold mb-2 mt-4">Hvem skal du spørge efter</h3>
     <ul class="list-disc list-inside space-y-1 mb-4">${contactsHtml}</ul>
-    <h3 class="font-semibold mb-2">Forslag til åbningsreplik</h3>
-    <p class="italic border-l-4 border-slate-300 pl-3 mb-4">${escapeHtml(brief.openingLine)}</p>
-    <h3 class="font-semibold mb-2">Opfølgende spørgsmål</h3>
+    <h3 class="font-semibold mb-2">Forslag til åbningsreplikker</h3>
+    ${openersHtml}
+    <h3 class="font-semibold mb-2 mt-4">Opfølgende spørgsmål</h3>
     <ul class="list-disc list-inside space-y-1 mb-4">${questionsHtml}</ul>
     <a href="${downloadUrl}" download="${brief.company.name}.md" class="text-sm underline text-slate-600">Download som Markdown</a>
   `;
@@ -112,7 +129,7 @@ form.addEventListener("submit", async (e) => {
   if (!companyName) return;
 
   submitBtn.disabled = true;
-  statusEl.textContent = "Researcher... dette kan tage 30-90 sekunder.";
+  statusEl.textContent = "Researcher... dette kan tage 1-3 minutter (dyb søgning).";
   resultEl.classList.add("hidden");
 
   try {

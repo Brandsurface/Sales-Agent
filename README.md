@@ -14,7 +14,7 @@ mappet til Exemplar's ydelser (label-, doypack-, dåse-, POS-, cartonage- og shr
 
 ### Web-UI
 Åbn http://localhost:4000, udfyld firmanavn (+ evt. website/noter), tryk "Research virksomhed".
-Tager typisk 30-90 sekunder (dyb websøgning + strukturering). Tidligere researchede leads ses i højre side.
+Tager typisk 1-3 minutter (dyb websøgning + strukturering). Tidligere researchede leads ses i højre side.
 
 ### CLI - enkelt lead
 ```
@@ -40,8 +40,11 @@ Alle briefs gemmes i `/briefs` som både `.json` (fuld data) og `.md` (klar til 
    signal-taksonomi, og skriver et research-memo med kildehenvisninger. Ingen opdigtning tilladt - lav
    tillid til data siges ærligt.
 3. **Strukturering** (`claude-sonnet-5`, billigere, intet værktøj): omsætter memoet til et fast JSON-skema
-   (signaler, beslutningstager, åbningsreplik, opfølgningsspørgsmål, samlet confidence).
-4. Brief'en gemmes lokalt og vises i UI'et/CLI'en.
+   **på dansk** - signaler rangeret efter styrke (stærkeste ringe-grund øverst), fit-vurdering (er firmaet
+   overhovedet et Exemplar-match?), beslutningstager, 2-3 åbningsreplikker forankret i konkrete fund,
+   opfølgningsspørgsmål og samlet confidence.
+4. Brief'en gemmes lokalt og vises i UI'et/CLI'en. I CSV-batch-tilstand printes til sidst en rangeret
+   ringeliste (bedste fit + confidence øverst).
 
 Modellerne kan ændres via `ANTHROPIC_RESEARCH_MODEL` / `ANTHROPIC_BRIEF_MODEL` i `.env`, hvis du fx vil
 bruge en billigere model til research-fasen ved høj volumen.

@@ -24,6 +24,11 @@ export const SignalSchema = z.object({
     .describe(
       "Which Exemplar service ties to this signal: label mockups, doypack mockups, can mockups, POS displays, cartonage mockups, shrink wrap, or custom packaging"
     ),
+  strength: z
+    .enum(["strong", "medium", "weak"])
+    .describe(
+      "How call-worthy: strong = recent (<6 months), concrete, packaging-adjacent; medium = real but older or less direct; weak = indirect or unverified"
+    ),
   sourceTitle: z.string().describe("Title of the source article/page"),
   sourceUrl: z.string().describe("URL of the source"),
   sourceDate: z.string().nullable().describe("Publish date of the source if known, else null"),
@@ -47,12 +52,20 @@ export const BriefSchema = z.object({
   }),
   summary: z
     .string()
-    .describe("2-4 sentence snapshot of what the company does and what packaging is currently visible in use"),
+    .describe("2-4 sentence snapshot of what the company does and what packaging formats they currently sell in"),
+  fit: z.object({
+    level: z
+      .enum(["strong", "medium", "weak"])
+      .describe("Does this company actually sell physical packaged consumer products Exemplar can mock up?"),
+    rationale: z.string().describe("One or two sentences on why, naming their actual packaging formats"),
+  }),
   signals: z
     .array(SignalSchema)
-    .describe("3-6 concrete, cited, prioritized signals that justify a call now"),
+    .describe("3-6 concrete, cited signals that justify a call now, ordered strongest first"),
   decisionMakers: z.array(DecisionMakerSchema),
-  openingLine: z.string().describe("A concrete, specific suggested opening line for the call"),
+  openingLines: z
+    .array(z.string())
+    .describe("2-3 alternative opening lines in Danish, each anchored in a specific found signal"),
   followUpQuestions: z.array(z.string()),
   confidence: z
     .enum(["high", "medium", "low"])

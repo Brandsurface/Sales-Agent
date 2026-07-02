@@ -40,16 +40,18 @@ Dig deep. Find concrete, current, cited signals per the taxonomy in your instruc
   let messages: Anthropic.MessageParam[] = [{ role: "user", content: userPrompt }];
   let finalMessage: Anthropic.Message | null = null;
 
+  const today = new Date().toISOString().slice(0, 10);
+
   for (let i = 0; i < MAX_PAUSE_CONTINUATIONS; i++) {
     const stream = client.messages.stream({
       model: RESEARCH_MODEL,
-      max_tokens: 16000,
-      system: researchSystemPrompt(),
+      max_tokens: 24000,
+      system: researchSystemPrompt(today),
       thinking: { type: "adaptive" },
-      output_config: { effort: "high" },
+      output_config: { effort: "xhigh" },
       tools: [
-        { type: "web_search_20260209", name: "web_search", max_uses: 8 },
-        { type: "web_fetch_20260209", name: "web_fetch", max_uses: 5 },
+        { type: "web_search_20260209", name: "web_search", max_uses: 10 },
+        { type: "web_fetch_20260209", name: "web_fetch", max_uses: 6 },
       ],
       messages,
     });
