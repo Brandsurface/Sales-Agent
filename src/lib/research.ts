@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { getClient, RESEARCH_MODEL } from "./anthropic.js";
 import { researchSystemPrompt } from "./prompts.js";
-import type { CvrInfo, ResearchInput } from "./types.js";
+import type { RegistryInfo, ResearchInput } from "./types.js";
 
 const MAX_PAUSE_CONTINUATIONS = 5;
 
@@ -18,20 +18,22 @@ export interface ResearchResult {
  */
 export async function runDeepResearch(
   input: ResearchInput,
-  cvr: CvrInfo | null,
+  registration: RegistryInfo | null,
   onProgress?: (text: string) => void
 ): Promise<ResearchResult> {
   const client = getClient();
 
-  const cvrBlock = cvr
-    ? `\n\nDanish business registry (CVR) data found:\n${JSON.stringify(cvr, null, 2)}`
-    : "";
+  const registrationBlock = registration
+    ? `\n\nCompany registration data already found on the company's own website (trust this, no need to re-find it):\n${JSON.stringify(registration, null, 2)}`
+    : input.website
+      ? `\n\nNo company registration number was found automatically. Use the web_fetch tool to fetch ${input.website} and, if needed, its imprint/legal-notice/"Impressum"/kontakt page, and try to find the official registration number yourself (e.g. Danish CVR, German Handelsregister/HRB, Norwegian/Swedish Org.nr, or an EU VAT ID). Report it in your memo with the exact page you found it on, or state plainly that you could not find one.`
+      : "";
 
   const userPrompt = `Research this prospect company for Exemplar's sales team:
 
 Company name: ${input.companyName}
 Website: ${input.website || "(not provided - find it)"}
-${input.notes ? `Additional notes from the sales rep: ${input.notes}` : ""}${cvrBlock}
+${input.notes ? `Additional notes from the sales rep: ${input.notes}` : ""}${registrationBlock}
 
 Dig deep. Find concrete, current, cited signals per the taxonomy in your instructions.`;
 
@@ -45,7 +47,10 @@ Dig deep. Find concrete, current, cited signals per the taxonomy in your instruc
       system: researchSystemPrompt(),
       thinking: { type: "adaptive" },
       output_config: { effort: "high" },
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 8 }],
+      tools: [
+        { type: "web_search_20260209", name: "web_search", max_uses: 8 },
+        { type: "web_fetch_20260209", name: "web_fetch", max_uses: 5 },
+      ],
       messages,
     });
 

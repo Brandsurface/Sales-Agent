@@ -1,13 +1,17 @@
 import { z } from "zod";
 
-export const CvrInfoSchema = z.object({
-  number: z.string().nullable(),
-  industryText: z.string().nullable(),
-  employeesRange: z.string().nullable(),
-  founded: z.string().nullable(),
+export const RegistryInfoSchema = z.object({
+  number: z.string().nullable().describe("The legal registration number, e.g. a Danish CVR or German HRB number"),
+  type: z
+    .string()
+    .nullable()
+    .describe("What kind of registration this is and which country, e.g. 'CVR (Denmark)' or 'Handelsregister (Germany)'"),
+  authority: z.string().nullable().describe("Registering court/authority if stated, e.g. a German Registergericht"),
+  vatId: z.string().nullable().describe("VAT/tax ID if found, e.g. a German USt-IdNr or EU VAT number"),
   address: z.string().nullable(),
+  sourceUrl: z.string().nullable().describe("The page this was found on (usually an imprint/legal notice page)"),
 });
-export type CvrInfo = z.infer<typeof CvrInfoSchema>;
+export type RegistryInfo = z.infer<typeof RegistryInfoSchema>;
 
 export const SignalSchema = z.object({
   title: z.string().describe("Short name for the signal, e.g. 'New oat-milk line launch'"),
@@ -39,7 +43,7 @@ export const BriefSchema = z.object({
   company: z.object({
     name: z.string(),
     website: z.string(),
-    cvr: CvrInfoSchema.nullable(),
+    registration: RegistryInfoSchema.nullable(),
   }),
   summary: z
     .string()

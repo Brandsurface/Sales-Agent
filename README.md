@@ -31,8 +31,10 @@ Alle briefs gemmes i `/briefs` som både `.json` (fuld data) og `.md` (klar til 
 
 ## Hvordan det virker
 
-1. **CVR-opslag** (best-effort): hvis firmaet ligner et dansk selskab, slås det op via det gratis
-   `cvrapi.dk` for branchekode, antal ansatte, stiftelsesdato mv. Fejler opslaget, springes det bare over.
+1. **Registreringsopslag** (best-effort, virker på tværs af lande): hjemmesiden (URL'en du giver) hentes,
+   og en Impressum/kontakt/legal-side findes og scannes for det officielle registreringsnummer - fx dansk
+   CVR, tysk Handelsregister/HRB, norsk/svensk Org.nr, eller et bare EU VAT-nummer. Ingen ekstern API eller
+   nøgle nødvendig. Findes intet, springes det bare over.
 2. **Dyb research** (`claude-opus-4-8` + Anthropics indbyggede `web_search`-værktøj): modellen søger
    selv gentagne gange (dansk + engelsk), leder efter konkrete, daterede signaler ud fra en fast
    signal-taksonomi, og skriver et research-memo med kildehenvisninger. Ingen opdigtning tilladt - lav
@@ -46,6 +48,7 @@ bruge en billigere model til research-fasen ved høj volumen.
 
 ## Begrænsninger (v1)
 
-- CVR-opslag er begrænset til 50 gratis opslag/dag hos cvrapi.dk.
+- Registreringsopslaget kræver at virksomheden har en hjemmeside med en findelig Impressum/kontakt/legal-side
+  - virker ikke uden en website-URL, og finder intet hvis siden ikke matcher de kendte mønstre.
 - CSV-parseren er simpel (ingen understøttelse af citerede felter med komma).
 - Ingen autentificering - kun tænkt til lokal brug.

@@ -46,6 +46,9 @@ Rules:
 - Use the web_search tool repeatedly and thoroughly. Do not settle for a single search or the company homepage.
   Search for recent news (last 6-12 months preferred), job postings, LinkedIn presence, reviews, and industry
   coverage.
+- Use the web_fetch tool to directly read specific pages, e.g. the company's own website, an imprint/legal-notice
+  page ("Impressum" in German, often just in the footer elsewhere), or a specific news article a search result
+  pointed to. This works for any country - Danish, German, or otherwise.
 - Every claim must be traceable to a specific source with a URL and, where available, a date. Never invent a
   signal, a name, or a fact. If you cannot find solid recent signals, say so plainly rather than padding with
   generic filler.
@@ -61,6 +64,8 @@ export function structuringSystemPrompt(): string {
   return `You convert a sales research memo into a structured brief for a call-prep tool. Only use information
 present in the memo - do not add, embellish, or invent facts, names, or sources. If the memo does not contain
 enough information for a field (e.g. no decision-maker name was found), reflect that honestly (e.g. name: null,
-and a title/how-to-find guess only if the memo supports it). Keep the tone concrete and specific, never generic
-marketing language.`;
+and a title/how-to-find guess only if the memo supports it). If the memo mentions a company registration number
+(CVR, Handelsregister/HRB, Org.nr, VAT ID, etc.) that it found itself, put it in company.registration - otherwise
+leave company.registration null (it may be filled in separately from a pre-fetch step). Keep the tone concrete
+and specific, never generic marketing language.`;
 }

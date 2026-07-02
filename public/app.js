@@ -44,6 +44,16 @@ function renderBrief(brief, markdown) {
 
   const questionsHtml = brief.followUpQuestions.map((q) => `<li class="text-sm">${escapeHtml(q)}</li>`).join("");
 
+  const r = brief.company.registration;
+  const registrationHtml = r
+    ? `<p class="text-sm text-slate-600 mb-3">
+        ${r.type ? escapeHtml(r.type) : "Registrering"}${r.number ? `: ${escapeHtml(r.number)}` : ""}
+        ${r.vatId ? ` | VAT ${escapeHtml(r.vatId)}` : ""}
+        ${r.authority ? ` | ${escapeHtml(r.authority)}` : ""}
+        ${r.sourceUrl ? `(<a class="underline" href="${escapeHtml(r.sourceUrl)}" target="_blank" rel="noopener">kilde</a>)` : ""}
+      </p>`
+    : "";
+
   const blob = new Blob([markdown], { type: "text/markdown" });
   const downloadUrl = URL.createObjectURL(blob);
 
@@ -52,7 +62,8 @@ function renderBrief(brief, markdown) {
       <h2 class="text-xl font-bold">${escapeHtml(brief.company.name)}</h2>
       ${confidenceBadge(brief.confidence)}
     </div>
-    <p class="text-sm text-slate-500 mb-3">${escapeHtml(brief.company.website || "")}</p>
+    <p class="text-sm text-slate-500 mb-1">${escapeHtml(brief.company.website || "")}</p>
+    ${registrationHtml}
     <p class="mb-4">${escapeHtml(brief.summary)}</p>
     <h3 class="font-semibold mb-2">Signaler - grunde til at ringe nu</h3>
     ${signalsHtml}

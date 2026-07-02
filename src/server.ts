@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { lookupCvr } from "./lib/cvr.js";
+import { lookupCompanyRegistration } from "./lib/registry.js";
 import { runDeepResearch } from "./lib/research.js";
 import { structureBrief, renderBriefMarkdown } from "./lib/brief.js";
 import { saveBrief, listBriefs, getBrief } from "./lib/storage.js";
@@ -30,9 +30,9 @@ app.post("/api/research", async (req, res) => {
 
   try {
     const input = { companyName, website: website || undefined, notes: notes || undefined };
-    const cvr = await lookupCvr(companyName);
-    const { memo } = await runDeepResearch(input, cvr);
-    const brief = await structureBrief(input, cvr, memo);
+    const registration = await lookupCompanyRegistration(input.website);
+    const { memo } = await runDeepResearch(input, registration);
+    const brief = await structureBrief(input, registration, memo);
     const researchedAt = new Date().toISOString();
     const markdown = renderBriefMarkdown(brief, researchedAt);
     const saved = await saveBrief(brief, markdown);

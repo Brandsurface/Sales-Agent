@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { readFile } from "node:fs/promises";
-import { lookupCvr } from "./lib/cvr.js";
+import { lookupCompanyRegistration } from "./lib/registry.js";
 import { runDeepResearch } from "./lib/research.js";
 import { structureBrief, renderBriefMarkdown } from "./lib/brief.js";
 import { saveBrief } from "./lib/storage.js";
@@ -27,14 +27,14 @@ function parseArgs(argv: string[]): Record<string, string> {
 async function researchOne(input: ResearchInput): Promise<void> {
   console.log(`\n=== Researching: ${input.companyName} ===`);
 
-  const cvr = await lookupCvr(input.companyName);
-  if (cvr) console.log(`CVR match found: ${cvr.number ?? "?"} - ${cvr.industryText ?? ""}`);
+  const registration = input.website ? await lookupCompanyRegistration(input.website) : null;
+  if (registration) console.log(`Registration found: ${registration.type ?? "?"} ${registration.number ?? ""}`);
 
   console.log("Running deep research (this can take 30-90s)...");
-  const { memo, model } = await runDeepResearch(input, cvr, (delta) => process.stdout.write(delta));
+  const { memo, model } = await runDeepResearch(input, registration, (delta) => process.stdout.write(delta));
   console.log(`\n\nResearch complete (model: ${model}). Structuring brief...`);
 
-  const brief = await structureBrief(input, cvr, memo);
+  const brief = await structureBrief(input, registration, memo);
   const markdown = renderBriefMarkdown(brief, new Date().toISOString());
   const saved = await saveBrief(brief, markdown);
 

@@ -1,7 +1,7 @@
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { getClient, BRIEF_MODEL } from "./anthropic.js";
 import { structuringSystemPrompt } from "./prompts.js";
-import { BriefSchema, type Brief, type CvrInfo, type ResearchInput } from "./types.js";
+import { BriefSchema, type Brief, type RegistryInfo, type ResearchInput } from "./types.js";
 
 /**
  * Phase 2: turn the free-text research memo into a structured, consistently shaped brief.
@@ -9,7 +9,7 @@ import { BriefSchema, type Brief, type CvrInfo, type ResearchInput } from "./typ
  */
 export async function structureBrief(
   input: ResearchInput,
-  cvr: CvrInfo | null,
+  registration: RegistryInfo | null,
   memo: string
 ): Promise<Brief> {
   const client = getClient();
@@ -35,7 +35,9 @@ export async function structureBrief(
   // Trust our own inputs over anything the model may have paraphrased.
   brief.company.name = input.companyName;
   brief.company.website = input.website || brief.company.website;
-  brief.company.cvr = cvr;
+  // Prefer the pre-fetched registration lookup (structured, verified); fall back to whatever
+  // the model may have found itself via web_fetch and reported in the memo.
+  brief.company.registration = registration ?? brief.company.registration;
   return brief;
 }
 
@@ -46,16 +48,18 @@ export function renderBriefMarkdown(brief: Brief, researchedAt: string): string 
   lines.push(`*Researched ${researchedAt} - confidence: **${brief.confidence}***`);
   lines.push("");
   lines.push(`**Website:** ${brief.company.website}`);
-  if (brief.company.cvr) {
-    const c = brief.company.cvr;
+  if (brief.company.registration) {
+    const r = brief.company.registration;
     const parts = [
-      c.number ? `CVR ${c.number}` : null,
-      c.industryText,
-      c.employeesRange ? `${c.employeesRange} employees` : null,
-      c.founded ? `founded ${c.founded}` : null,
-      c.address,
+      r.type && r.number ? `${r.type}: ${r.number}` : r.number,
+      r.vatId ? `VAT ${r.vatId}` : null,
+      r.authority,
+      r.address,
     ].filter(Boolean);
-    if (parts.length > 0) lines.push(`**Firmographics:** ${parts.join(" | ")}`);
+    if (parts.length > 0) {
+      const sourceSuffix = r.sourceUrl ? ` ([source](${r.sourceUrl}))` : "";
+      lines.push(`**Registration:** ${parts.join(" | ")}${sourceSuffix}`);
+    }
   }
   lines.push("");
   lines.push("## Snapshot");
