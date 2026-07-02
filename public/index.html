@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Exemplar Sales Agent</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <div class="max-w-5xl mx-auto p-6">
+    <header class="mb-6">
+      <h1 class="text-2xl font-bold">Exemplar Sales Agent</h1>
+      <p class="text-slate-600">Research en prospect-virksomhed og få konkrete grunde til at ringe.</p>
+    </header>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="md:col-span-2 space-y-6">
+        <form id="research-form" class="bg-white rounded-lg shadow p-4 space-y-3">
+          <div>
+            <label class="block text-sm font-medium mb-1">Firmanavn *</label>
+            <input id="companyName" required class="w-full border rounded px-3 py-2" placeholder="Fx Kims A/S" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Website</label>
+            <input id="website" class="w-full border rounded px-3 py-2" placeholder="https://..." />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Noter (valgfrit)</label>
+            <textarea id="notes" class="w-full border rounded px-3 py-2" rows="2" placeholder="Fx: kender indkøbschef, tidligere kunde af konkurrent X"></textarea>
+          </div>
+          <button type="submit" id="submit-btn" class="bg-slate-900 text-white rounded px-4 py-2 font-medium">
+            Research virksomhed
+          </button>
+          <p id="status" class="text-sm text-slate-500"></p>
+        </form>
+
+        <div id="result" class="bg-white rounded-lg shadow p-4 hidden"></div>
+      </div>
+
+      <div>
+        <h2 class="font-semibold mb-2">Tidligere researchede</h2>
+        <ul id="history" class="space-y-2"></ul>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
