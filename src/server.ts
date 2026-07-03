@@ -52,17 +52,52 @@ app.get("/api/models", (_req, res) => {
   });
 });
 
+/** One JSON object per line (NDJSON), flushed as the pipeline progresses, so the browser
+ * can show live phase/progress feedback instead of blocking silently for 1-3 minutes. */
+type StreamEvent =
+  | { type: "phase"; phase: "registration" | "research" | "structuring" }
+  | { type: "delta"; text: string }
+  | { type: "note"; text: string }
+  | { type: "done"; id: string; brief: Brief; markdown: string; memo: string }
+  | { type: "warning"; id: string; memo: string; warning: string }
+  | { type: "error"; error: string };
+
+function writeEvent(res: express.Response, event: StreamEvent): void {
+  res.write(JSON.stringify(event) + "\n");
+}
+
+/** Gemini's research call has no token-level streaming - emit periodic "still working"
+ * notes so the live feed doesn't look frozen during its (typically 20-60s) single call. */
+function startHeartbeat(res: express.Response, label: string): () => void {
+  let n = 0;
+  const timer = setInterval(() => {
+    n++;
+    writeEvent(res, { type: "note", text: `${label}${".".repeat((n % 3) + 1)}` });
+  }, 2000);
+  return () => clearInterval(timer);
+}
+
 async function runResearchPhase(
   provider: Provider,
   input: ResearchInput,
   registration: RegistryInfo | null,
   model: string | undefined,
-  maxTokens: number
+  maxTokens: number,
+  res: express.Response
 ): Promise<{ memo: string }> {
   if (provider === "gemini") {
-    return runDeepResearchGemini(input, registration, { model, maxTokens });
+    const stopHeartbeat = startHeartbeat(res, "Gemini søger og læser kilder");
+    try {
+      return await runDeepResearchGemini(input, registration, { model, maxTokens });
+    } finally {
+      stopHeartbeat();
+    }
   }
-  return runDeepResearch(input, registration, { model, maxTokens });
+  return runDeepResearch(input, registration, {
+    model,
+    maxTokens,
+    onProgress: (text) => writeEvent(res, { type: "delta", text }),
+  });
 }
 
 async function runStructuringPhase(
@@ -109,15 +144,26 @@ app.post("/api/research", async (req, res) => {
 
   const input = { companyName, website: website || undefined, notes: notes || undefined };
 
+  res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("X-Accel-Buffering", "no"); // disable nginx-style proxy buffering, if present
+  res.flushHeaders();
+
   try {
+    writeEvent(res, { type: "phase", phase: "registration" });
     const registration = await lookupCompanyRegistration(input.website);
+
+    writeEvent(res, { type: "phase", phase: "research" });
     const { memo } = await runResearchPhase(
       resolvedProvider,
       input,
       registration,
       resolvedModel,
-      resolvedResearchMaxTokens
+      resolvedResearchMaxTokens,
+      res
     );
+
+    writeEvent(res, { type: "phase", phase: "structuring" });
 
     try {
       const brief = await runStructuringPhase(
@@ -132,16 +178,15 @@ app.post("/api/research", async (req, res) => {
       const markdown = renderBriefMarkdown(brief, researchedAt);
       const saved = await saveBrief(brief, markdown);
 
-      res.json({ id: saved.id, brief, markdown, memo });
+      writeEvent(res, { type: "done", id: saved.id, brief, markdown, memo });
     } catch (structuringErr) {
       // Research succeeded (and was paid for) even though structuring failed - never
       // discard the memo, so the rep still gets something for the spend.
       console.error("Structuring failed after research completed:", structuringErr);
       const saved = await saveRawMemo(companyName, memo);
-      res.json({
+      writeEvent(res, {
+        type: "warning",
         id: saved.id,
-        brief: null,
-        markdown: null,
         memo,
         warning:
           "Kunne ikke strukturere svaret automatisk, men den rå research er gemt og vist herunder. " +
@@ -150,7 +195,9 @@ app.post("/api/research", async (req, res) => {
     }
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err instanceof Error ? err.message : "Research failed" });
+    writeEvent(res, { type: "error", error: err instanceof Error ? err.message : "Research failed" });
+  } finally {
+    res.end();
   }
 });
 

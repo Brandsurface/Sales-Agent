@@ -3,6 +3,11 @@ const statusEl = document.getElementById("status");
 const resultEl = document.getElementById("result");
 const submitBtn = document.getElementById("submit-btn");
 const historyEl = document.getElementById("history");
+const progressPanel = document.getElementById("progress-panel");
+const terminalWrap = document.getElementById("terminal-wrap");
+const terminalLog = document.getElementById("terminal-log");
+const terminalStatus = document.getElementById("terminal-status");
+const elapsedEl = document.getElementById("elapsed");
 
 function escapeHtml(str) {
   const div = document.createElement("div");
@@ -104,6 +109,95 @@ function renderRawMemo(memo, warning) {
   resultEl.classList.remove("hidden");
 }
 
+// --- Live progress panel: phase rail + streaming terminal feed ---
+
+const PHASES = ["registration", "research", "structuring"];
+let elapsedTimer = null;
+
+function resetProgressPanel() {
+  progressPanel.classList.remove("hidden");
+  terminalWrap.classList.remove("hidden");
+  document.getElementById("toggle-terminal").textContent = "skjul log ▾";
+  terminalLog.innerHTML = "";
+  terminalStatus.textContent = "";
+  document.querySelectorAll(".phase-step").forEach((el) => el.classList.remove("active", "done"));
+
+  const start = Date.now();
+  elapsedEl.textContent = "00:00";
+  clearInterval(elapsedTimer);
+  elapsedTimer = setInterval(() => {
+    const s = Math.floor((Date.now() - start) / 1000);
+    elapsedEl.textContent = `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  }, 250);
+}
+
+function stopProgressPanel() {
+  clearInterval(elapsedTimer);
+}
+
+function setPhase(phase) {
+  const idx = PHASES.indexOf(phase);
+  document.querySelectorAll(".phase-step").forEach((el) => {
+    const stepIdx = PHASES.indexOf(el.dataset.phase);
+    el.classList.toggle("done", stepIdx < idx);
+    el.classList.toggle("active", stepIdx === idx);
+  });
+  terminalStatus.textContent = "";
+}
+
+function appendDelta(text) {
+  terminalLog.textContent += text;
+  terminalWrap.scrollTop = terminalWrap.scrollHeight;
+}
+
+function setStatusNote(text) {
+  terminalStatus.textContent = `> ${text}`;
+}
+
+document.getElementById("toggle-terminal").addEventListener("click", (e) => {
+  const collapsed = terminalWrap.classList.toggle("hidden");
+  e.target.textContent = collapsed ? "vis log ▸" : "skjul log ▾";
+});
+
+/** Reads the NDJSON stream from POST /api/research, dispatching one callback per event
+ * type as each line arrives, so the UI can update live instead of waiting for one big
+ * response after 1-3 minutes. */
+async function streamResearch(payload, handlers) {
+  const res = await fetch("/api/research", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.body) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Ukendt fejl (intet svar fra serveren)");
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Serverfejl (${res.status})`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let newlineIndex;
+    while ((newlineIndex = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, newlineIndex).trim();
+      buffer = buffer.slice(newlineIndex + 1);
+      if (!line) continue;
+      const event = JSON.parse(line);
+      handlers[event.type]?.(event);
+    }
+  }
+}
+
 let providersData = null;
 
 function populateModelsForProvider(providerId) {
@@ -182,29 +276,51 @@ form.addEventListener("submit", async (e) => {
   if (!companyName) return;
 
   submitBtn.disabled = true;
-  statusEl.textContent = "Researcher... dette kan tage 1-3 minutter (dyb søgning).";
+  statusEl.textContent = "Researcher... følg fremdriften i den live log herunder.";
   resultEl.classList.add("hidden");
+  resetProgressPanel();
+
+  let outcome = null;
+  let streamError = null;
 
   try {
-    const res = await fetch("/api/research", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ companyName, website, notes, provider, model, researchMaxTokens, briefMaxTokens }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Ukendt fejl");
+    await streamResearch(
+      { companyName, website, notes, provider, model, researchMaxTokens, briefMaxTokens },
+      {
+        phase: (e) => setPhase(e.phase),
+        delta: (e) => appendDelta(e.text),
+        note: (e) => setStatusNote(e.text),
+        done: (e) => {
+          outcome = e;
+        },
+        warning: (e) => {
+          outcome = e;
+        },
+        error: (e) => {
+          streamError = e.error;
+        },
+      }
+    );
 
-    if (data.brief) {
-      renderBrief(data.brief, data.markdown);
+    if (streamError) throw new Error(streamError);
+    if (!outcome) throw new Error("Intet svar modtaget fra serveren.");
+
+    document.querySelectorAll(".phase-step").forEach((el) => el.classList.add("done"));
+    setStatusNote("Færdig.");
+
+    if (outcome.brief) {
+      renderBrief(outcome.brief, outcome.markdown);
       statusEl.textContent = "Færdig.";
     } else {
-      renderRawMemo(data.memo, data.warning);
+      renderRawMemo(outcome.memo, outcome.warning);
       statusEl.textContent = "Færdig (med advarsel).";
     }
     loadHistory();
   } catch (err) {
+    setStatusNote(`Fejl: ${err.message}`);
     statusEl.textContent = `Fejl: ${err.message}`;
   } finally {
+    stopProgressPanel();
     submitBtn.disabled = false;
   }
 });

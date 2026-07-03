@@ -14,7 +14,10 @@ mappet til Exemplar's ydelser (label-, doypack-, dåse-, POS-, cartonage- og shr
 
 ### Web-UI
 Åbn http://localhost:4000, udfyld firmanavn (+ evt. website/noter), tryk "Research virksomhed".
-Tager typisk 1-3 minutter (dyb websøgning + strukturering). Tidligere researchede leads ses i højre side.
+Tager typisk 1-3 minutter (dyb websøgning + strukturering). Mens den kører, vises et live feed med
+faseindikator (registrering → research → strukturering), forløbet tid, og - for Claude - selve
+research-teksten der strømmer ind efterhånden som den skrives, så du kan se præcis hvor langt den er
+og at den rent faktisk arbejder. Tidligere researchede leads ses i højre side.
 
 ### CLI - enkelt lead
 ```
