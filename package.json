@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.109.0",
+    "@google/genai": "^2.10.0",
     "dotenv": "^17.0.0",
     "express": "^4.21.0",
     "zod": "^4.0.0"

@@ -104,23 +104,45 @@ function renderRawMemo(memo, warning) {
   resultEl.classList.remove("hidden");
 }
 
+let providersData = null;
+
+function populateModelsForProvider(providerId) {
+  if (!providersData) return;
+  const provider = providersData[providerId];
+  const modelSelect = document.getElementById("model");
+  modelSelect.innerHTML = '<option value="">Standard (fra server-config)</option>';
+  if (!provider) return;
+
+  provider.models.forEach((m) => {
+    const opt = document.createElement("option");
+    opt.value = m.id;
+    opt.textContent = m.label;
+    modelSelect.appendChild(opt);
+  });
+  document.getElementById("researchMaxTokens").placeholder = String(provider.defaults.researchMaxTokens);
+  document.getElementById("briefMaxTokens").placeholder = String(provider.defaults.briefMaxTokens);
+
+  const hintEl = document.getElementById("provider-hint");
+  hintEl.textContent = provider.available
+    ? ""
+    : `Kræver en API-nøgle på serveren (se .env.example) for at kunne bruges.`;
+  hintEl.className = provider.available ? "text-xs text-slate-500 mt-1" : "text-xs text-red-600 mt-1";
+}
+
 async function loadModelOptions() {
   try {
     const res = await fetch("/api/models");
     const data = await res.json();
-    const select = document.getElementById("model");
-    data.models.forEach((m) => {
-      const opt = document.createElement("option");
-      opt.value = m.id;
-      opt.textContent = m.label;
-      select.appendChild(opt);
-    });
-    document.getElementById("researchMaxTokens").placeholder = String(data.defaults.researchMaxTokens);
-    document.getElementById("briefMaxTokens").placeholder = String(data.defaults.briefMaxTokens);
+    providersData = data.providers;
+    populateModelsForProvider(document.getElementById("provider").value);
   } catch {
     // Advanced settings are optional - if this fails, the form still works with server defaults.
   }
 }
+
+document.getElementById("provider").addEventListener("change", (e) => {
+  populateModelsForProvider(e.target.value);
+});
 
 async function loadHistory() {
   const res = await fetch("/api/briefs");
@@ -152,6 +174,7 @@ form.addEventListener("submit", async (e) => {
   const companyName = document.getElementById("companyName").value.trim();
   const website = document.getElementById("website").value.trim();
   const notes = document.getElementById("notes").value.trim();
+  const provider = document.getElementById("provider").value;
   const model = document.getElementById("model").value || undefined;
   const researchMaxTokens = document.getElementById("researchMaxTokens").value || undefined;
   const briefMaxTokens = document.getElementById("briefMaxTokens").value || undefined;
@@ -166,7 +189,7 @@ form.addEventListener("submit", async (e) => {
     const res = await fetch("/api/research", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ companyName, website, notes, model, researchMaxTokens, briefMaxTokens }),
+      body: JSON.stringify({ companyName, website, notes, provider, model, researchMaxTokens, briefMaxTokens }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Ukendt fejl");

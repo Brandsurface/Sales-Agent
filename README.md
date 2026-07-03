@@ -63,6 +63,20 @@ dobbelt så mange tokens. Fejler det stadig, går det allerede betalte research-
 gemmes som en `.raw.md`-fil i `/briefs` og vises direkte i UI'et/CLI'en med en advarsel, i stedet for
 bare at give en fejl og intet resultat.
 
+## Gemini som gratis test-udbyder
+
+Til at teste selve flowet uden at bruge Claude-credits kan du bruge Google Gemini (gratis tier):
+
+1. Hent en gratis nøgle på https://aistudio.google.com/apikey
+2. Sæt `GEMINI_API_KEY=` i `.env`
+3. Vælg "Gemini" under "Udbyder" i Avancerede indstillinger i UI'et, eller kør CLI'en med `--provider gemini`
+
+Gemini-sporet bruger nøjagtigt de samme system-prompts som Claude-sporet (samme signal-taksonomi,
+samme krav om kildehenvisning, samme brief-skema), men bruger Googles indbyggede søgeværktøj
+(`googleSearch`-grounding) i stedet for `web_search`, og er én enkelt kald pr. fase i stedet for
+Claudes multi-turn søgeloop - så det er tænkt til hurtig/billig test af flowet, ikke som en fuld
+erstatning for Opus' dybde. Kvaliteten af research vil typisk være lavere end Claude Opus 4.8.
+
 ## Begrænsninger (v1)
 
 - Registreringsopslaget kræver at virksomheden har en hjemmeside med en findelig Impressum/kontakt/legal-side

@@ -67,11 +67,18 @@ export async function structureBrief(
     console.warn("Structuring failed, retrying with a larger token budget:", (err as Error).message);
     brief = await callStructuring(input, memo, baseMaxTokens * 2, model);
   }
-  // Trust our own inputs over anything the model may have paraphrased.
+  return finalizeBrief(brief, input, registration);
+}
+
+/**
+ * Shared post-processing for a freshly-parsed Brief, regardless of which provider produced
+ * it: trust our own inputs over anything the model may have paraphrased, prefer the
+ * pre-fetched registration lookup over whatever the model may have found itself, and sort
+ * signals strongest-first.
+ */
+export function finalizeBrief(brief: Brief, input: ResearchInput, registration: RegistryInfo | null): Brief {
   brief.company.name = input.companyName;
   brief.company.website = input.website || brief.company.website;
-  // Prefer the pre-fetched registration lookup (structured, verified); fall back to whatever
-  // the model may have found itself via web_fetch and reported in the memo.
   brief.company.registration = registration ?? brief.company.registration;
   const strengthRank = { strong: 0, medium: 1, weak: 2 } as const;
   brief.signals.sort((a, b) => strengthRank[a.strength] - strengthRank[b.strength]);

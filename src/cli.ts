@@ -3,9 +3,24 @@ import { readFile } from "node:fs/promises";
 import { lookupCompanyRegistration } from "./lib/registry.js";
 import { runDeepResearch } from "./lib/research.js";
 import { structureBrief, renderBriefMarkdown } from "./lib/brief.js";
+import { runDeepResearchGemini, structureBriefGemini } from "./lib/gemini.js";
 import { saveBrief, saveRawMemo } from "./lib/storage.js";
-import { AVAILABLE_MODELS, isValidModel, resolveMaxTokens, DEFAULT_RESEARCH_MAX_TOKENS, DEFAULT_BRIEF_MAX_TOKENS } from "./lib/anthropic.js";
+import {
+  AVAILABLE_MODELS,
+  isValidModel,
+  resolveMaxTokens,
+  DEFAULT_RESEARCH_MAX_TOKENS,
+  DEFAULT_BRIEF_MAX_TOKENS,
+} from "./lib/anthropic.js";
+import {
+  AVAILABLE_GEMINI_MODELS,
+  isValidGeminiModel,
+  DEFAULT_GEMINI_RESEARCH_MAX_TOKENS,
+  DEFAULT_GEMINI_BRIEF_MAX_TOKENS,
+} from "./lib/gemini.js";
 import type { Brief, ResearchInput } from "./lib/types.js";
+
+type Provider = "anthropic" | "gemini";
 
 function parseArgs(argv: string[]): Record<string, string> {
   const args: Record<string, string> = {};
@@ -26,30 +41,34 @@ function parseArgs(argv: string[]): Record<string, string> {
 }
 
 interface RunOptions {
+  provider: Provider;
   model?: string;
   researchMaxTokens: number;
   briefMaxTokens: number;
 }
 
 async function researchOne(input: ResearchInput, opts: RunOptions): Promise<Brief | null> {
-  console.log(`\n=== Researching: ${input.companyName} ===`);
+  console.log(`\n=== Researching: ${input.companyName} (${opts.provider}) ===`);
 
   const registration = input.website ? await lookupCompanyRegistration(input.website) : null;
   if (registration) console.log(`Registration found: ${registration.type ?? "?"} ${registration.number ?? ""}`);
 
   console.log("Running deep research (this can take 1-3 minutes)...");
-  const { memo, model } = await runDeepResearch(input, registration, {
-    model: opts.model,
-    maxTokens: opts.researchMaxTokens,
-    onProgress: (delta) => process.stdout.write(delta),
-  });
-  console.log(`\n\nResearch complete (model: ${model}). Structuring brief...`);
+  const { memo } =
+    opts.provider === "gemini"
+      ? await runDeepResearchGemini(input, registration, { model: opts.model, maxTokens: opts.researchMaxTokens })
+      : await runDeepResearch(input, registration, {
+          model: opts.model,
+          maxTokens: opts.researchMaxTokens,
+          onProgress: (delta) => process.stdout.write(delta),
+        });
+  console.log(`\n\nResearch complete. Structuring brief...`);
 
   try {
-    const brief = await structureBrief(input, registration, memo, {
-      model: opts.model,
-      maxTokens: opts.briefMaxTokens,
-    });
+    const brief =
+      opts.provider === "gemini"
+        ? await structureBriefGemini(input, registration, memo, { model: opts.model, maxTokens: opts.briefMaxTokens })
+        : await structureBrief(input, registration, memo, { model: opts.model, maxTokens: opts.briefMaxTokens });
     const markdown = renderBriefMarkdown(brief, new Date().toISOString());
     const saved = await saveBrief(brief, markdown);
 
@@ -77,14 +96,24 @@ function parseCsv(text: string): ResearchInput[] {
 }
 
 function resolveRunOptions(args: Record<string, string>): RunOptions {
-  if (args.model && !isValidModel(args.model)) {
-    const ids = AVAILABLE_MODELS.map((m) => m.id).join(", ");
-    console.warn(`Ukendt model "${args.model}" - falder tilbage til standard. Gyldige valg: ${ids}`);
+  const provider: Provider = args.provider === "gemini" ? "gemini" : "anthropic";
+  const isValid = provider === "gemini" ? isValidGeminiModel : isValidModel;
+  const validModels = provider === "gemini" ? AVAILABLE_GEMINI_MODELS : AVAILABLE_MODELS;
+
+  if (args.model && !isValid(args.model)) {
+    console.warn(
+      `Ukendt ${provider}-model "${args.model}" - falder tilbage til standard. Gyldige valg: ${validModels.map((m) => m.id).join(", ")}`
+    );
   }
+
+  const defaultResearchMaxTokens = provider === "gemini" ? DEFAULT_GEMINI_RESEARCH_MAX_TOKENS : DEFAULT_RESEARCH_MAX_TOKENS;
+  const defaultBriefMaxTokens = provider === "gemini" ? DEFAULT_GEMINI_BRIEF_MAX_TOKENS : DEFAULT_BRIEF_MAX_TOKENS;
+
   return {
-    model: isValidModel(args.model) ? args.model : undefined,
-    researchMaxTokens: resolveMaxTokens(args["max-tokens"] ?? args["research-max-tokens"], DEFAULT_RESEARCH_MAX_TOKENS),
-    briefMaxTokens: resolveMaxTokens(args["brief-max-tokens"], DEFAULT_BRIEF_MAX_TOKENS),
+    provider,
+    model: isValid(args.model) ? args.model : undefined,
+    researchMaxTokens: resolveMaxTokens(args["max-tokens"] ?? args["research-max-tokens"], defaultResearchMaxTokens),
+    briefMaxTokens: resolveMaxTokens(args["brief-max-tokens"], defaultBriefMaxTokens),
   };
 }
 
@@ -129,7 +158,7 @@ async function main() {
   if (!args.name) {
     console.error(
       'Usage: npm run research -- --name "Company A/S" [--url https://company.dk] [--notes "..."]\n' +
-        "                          [--model claude-opus-4-8|claude-sonnet-5|claude-haiku-4-5]\n" +
+        "                          [--provider anthropic|gemini] [--model <id>]\n" +
         "                          [--max-tokens 24000] [--brief-max-tokens 8000]\n" +
         "   or: npm run research -- --csv leads.csv   (columns: name,url,notes)"
     );
