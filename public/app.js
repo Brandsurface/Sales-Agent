@@ -95,6 +95,33 @@ function renderBrief(brief, markdown) {
   resultEl.classList.remove("hidden");
 }
 
+function renderRawMemo(memo, warning) {
+  resultEl.innerHTML = `
+    <div class="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded px-3 py-2 mb-4">${escapeHtml(warning || "Kunne ikke strukturere svaret.")}</div>
+    <h3 class="font-semibold mb-2">Rå research-memo</h3>
+    <pre class="whitespace-pre-wrap text-sm bg-slate-50 border rounded p-3">${escapeHtml(memo)}</pre>
+  `;
+  resultEl.classList.remove("hidden");
+}
+
+async function loadModelOptions() {
+  try {
+    const res = await fetch("/api/models");
+    const data = await res.json();
+    const select = document.getElementById("model");
+    data.models.forEach((m) => {
+      const opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = m.label;
+      select.appendChild(opt);
+    });
+    document.getElementById("researchMaxTokens").placeholder = String(data.defaults.researchMaxTokens);
+    document.getElementById("briefMaxTokens").placeholder = String(data.defaults.briefMaxTokens);
+  } catch {
+    // Advanced settings are optional - if this fails, the form still works with server defaults.
+  }
+}
+
 async function loadHistory() {
   const res = await fetch("/api/briefs");
   const items = await res.json();
@@ -125,6 +152,9 @@ form.addEventListener("submit", async (e) => {
   const companyName = document.getElementById("companyName").value.trim();
   const website = document.getElementById("website").value.trim();
   const notes = document.getElementById("notes").value.trim();
+  const model = document.getElementById("model").value || undefined;
+  const researchMaxTokens = document.getElementById("researchMaxTokens").value || undefined;
+  const briefMaxTokens = document.getElementById("briefMaxTokens").value || undefined;
 
   if (!companyName) return;
 
@@ -136,13 +166,18 @@ form.addEventListener("submit", async (e) => {
     const res = await fetch("/api/research", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ companyName, website, notes }),
+      body: JSON.stringify({ companyName, website, notes, model, researchMaxTokens, briefMaxTokens }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Ukendt fejl");
 
-    renderBrief(data.brief, data.markdown);
-    statusEl.textContent = "Færdig.";
+    if (data.brief) {
+      renderBrief(data.brief, data.markdown);
+      statusEl.textContent = "Færdig.";
+    } else {
+      renderRawMemo(data.memo, data.warning);
+      statusEl.textContent = "Færdig (med advarsel).";
+    }
     loadHistory();
   } catch (err) {
     statusEl.textContent = `Fejl: ${err.message}`;
@@ -151,4 +186,5 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
+loadModelOptions();
 loadHistory();

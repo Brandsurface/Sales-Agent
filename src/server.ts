@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { lookupCompanyRegistration } from "./lib/registry.js";
 import { runDeepResearch } from "./lib/research.js";
 import { structureBrief, renderBriefMarkdown } from "./lib/brief.js";
-import { saveBrief, listBriefs, getBrief } from "./lib/storage.js";
+import { saveBrief, saveRawMemo, listBriefs, getBrief } from "./lib/storage.js";
+import { AVAILABLE_MODELS, isValidModel, resolveMaxTokens, DEFAULT_RESEARCH_MAX_TOKENS, DEFAULT_BRIEF_MAX_TOKENS } from "./lib/anthropic.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -13,8 +14,18 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "..", "public")));
 
+app.get("/api/models", (_req, res) => {
+  res.json({
+    models: AVAILABLE_MODELS,
+    defaults: {
+      researchMaxTokens: DEFAULT_RESEARCH_MAX_TOKENS,
+      briefMaxTokens: DEFAULT_BRIEF_MAX_TOKENS,
+    },
+  });
+});
+
 app.post("/api/research", async (req, res) => {
-  const { companyName, website, notes } = req.body ?? {};
+  const { companyName, website, notes, model, researchMaxTokens, briefMaxTokens } = req.body ?? {};
 
   if (!companyName || typeof companyName !== "string") {
     res.status(400).json({ error: "companyName is required" });
@@ -28,16 +39,48 @@ app.post("/api/research", async (req, res) => {
     return;
   }
 
-  try {
-    const input = { companyName, website: website || undefined, notes: notes || undefined };
-    const registration = await lookupCompanyRegistration(input.website);
-    const { memo } = await runDeepResearch(input, registration);
-    const brief = await structureBrief(input, registration, memo);
-    const researchedAt = new Date().toISOString();
-    const markdown = renderBriefMarkdown(brief, researchedAt);
-    const saved = await saveBrief(brief, markdown);
+  // Client-supplied model/max_tokens are optional overrides - fall back to env defaults
+  // when absent or invalid, so a stray bad value never breaks the request.
+  const resolvedModel = isValidModel(model) ? model : undefined;
+  const resolvedResearchMaxTokens = resolveMaxTokens(researchMaxTokens, DEFAULT_RESEARCH_MAX_TOKENS);
+  const resolvedBriefMaxTokens = resolveMaxTokens(briefMaxTokens, DEFAULT_BRIEF_MAX_TOKENS);
 
-    res.json({ id: saved.id, brief, markdown, memo });
+  const input = { companyName, website: website || undefined, notes: notes || undefined };
+
+  let memo: string;
+  try {
+    const registration = await lookupCompanyRegistration(input.website);
+    const result = await runDeepResearch(input, registration, {
+      model: resolvedModel,
+      maxTokens: resolvedResearchMaxTokens,
+    });
+    memo = result.memo;
+
+    try {
+      const brief = await structureBrief(input, registration, memo, {
+        model: resolvedModel,
+        maxTokens: resolvedBriefMaxTokens,
+      });
+      const researchedAt = new Date().toISOString();
+      const markdown = renderBriefMarkdown(brief, researchedAt);
+      const saved = await saveBrief(brief, markdown);
+
+      res.json({ id: saved.id, brief, markdown, memo });
+    } catch (structuringErr) {
+      // Research succeeded (and was paid for) even though structuring failed - never
+      // discard the memo, so the rep still gets something for the spend.
+      console.error("Structuring failed after research completed:", structuringErr);
+      const saved = await saveRawMemo(companyName, memo);
+      res.json({
+        id: saved.id,
+        brief: null,
+        markdown: null,
+        memo,
+        warning:
+          "Kunne ikke strukturere svaret automatisk, men den rå research er gemt og vist herunder. " +
+          `(${structuringErr instanceof Error ? structuringErr.message : "ukendt fejl"})`,
+      });
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err instanceof Error ? err.message : "Research failed" });

@@ -1,22 +1,26 @@
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { getClient, BRIEF_MODEL } from "./anthropic.js";
+import { getClient, BRIEF_MODEL, DEFAULT_BRIEF_MAX_TOKENS } from "./anthropic.js";
 import { structuringSystemPrompt } from "./prompts.js";
 import { BriefSchema, type Brief, type RegistryInfo, type ResearchInput } from "./types.js";
 
 /**
- * Phase 2: turn the free-text research memo into a structured, consistently shaped brief.
- * Runs on a cheaper model with no tools - this is pure formatting of already-gathered facts.
+ * Runs the structuring call. Thinking is explicitly disabled - this step is pure
+ * transcription of facts already established in the memo, not reasoning, and Sonnet 5
+ * runs adaptive thinking by default when `thinking` is omitted, which would otherwise
+ * silently eat into the same max_tokens budget as the JSON output itself.
  */
-export async function structureBrief(
+async function callStructuring(
   input: ResearchInput,
-  registration: RegistryInfo | null,
-  memo: string
+  memo: string,
+  maxTokens: number,
+  model: string
 ): Promise<Brief> {
   const client = getClient();
 
   const response = await client.messages.parse({
-    model: BRIEF_MODEL,
-    max_tokens: 4000,
+    model,
+    max_tokens: maxTokens,
+    thinking: { type: "disabled" },
     system: structuringSystemPrompt(),
     output_config: { format: zodOutputFormat(BriefSchema) },
     messages: [
@@ -27,11 +31,42 @@ export async function structureBrief(
     ],
   });
 
+  if (response.stop_reason === "max_tokens") {
+    throw new Error(`Structuring output was cut off at max_tokens=${maxTokens} before finishing.`);
+  }
+
   if (!response.parsed_output) {
     throw new Error("Failed to parse a structured brief from the research memo.");
   }
 
-  const brief = response.parsed_output;
+  return response.parsed_output;
+}
+
+/**
+ * Phase 2: turn the free-text research memo into a structured, consistently shaped brief.
+ * Runs on a cheaper model with no tools - this is pure formatting of already-gathered facts.
+ * Retries once with a bigger token budget on failure so a truncated JSON response doesn't
+ * throw away an already-paid-for research memo (callers should still have a raw-memo
+ * fallback for the rare case both attempts fail - see server.ts/cli.ts).
+ */
+export async function structureBrief(
+  input: ResearchInput,
+  registration: RegistryInfo | null,
+  memo: string,
+  options: { model?: string; maxTokens?: number } = {}
+): Promise<Brief> {
+  const model = options.model || BRIEF_MODEL;
+  const baseMaxTokens = options.maxTokens || DEFAULT_BRIEF_MAX_TOKENS;
+
+  let brief: Brief;
+  try {
+    brief = await callStructuring(input, memo, baseMaxTokens, model);
+  } catch (err) {
+    // Truncation is often transient / schema-size-dependent - one retry with a much
+    // larger budget is cheap insurance against losing an already-paid-for research memo.
+    console.warn("Structuring failed, retrying with a larger token budget:", (err as Error).message);
+    brief = await callStructuring(input, memo, baseMaxTokens * 2, model);
+  }
   // Trust our own inputs over anything the model may have paraphrased.
   brief.company.name = input.companyName;
   brief.company.website = input.website || brief.company.website;

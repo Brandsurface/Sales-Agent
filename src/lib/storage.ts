@@ -43,6 +43,19 @@ export async function saveBrief(brief: Brief, markdown: string): Promise<SavedBr
   return record;
 }
 
+/**
+ * Fallback save for when the (expensive) research memo was produced but structuring into
+ * a Brief failed even after a retry - so a paid-for research call is never simply lost.
+ * Saved with a distinct extension so it doesn't show up in the structured-brief history list.
+ */
+export async function saveRawMemo(companyName: string, memo: string): Promise<{ id: string }> {
+  await mkdir(BRIEFS_DIR, { recursive: true });
+  const researchedAt = new Date().toISOString();
+  const id = `${slugify(companyName)}__${researchedAt.replace(/[:.]/g, "-")}`;
+  await writeFile(path.join(BRIEFS_DIR, `${id}.raw.md`), memo, "utf-8");
+  return { id };
+}
+
 export async function listBriefs(): Promise<BriefListItem[]> {
   await mkdir(BRIEFS_DIR, { recursive: true });
   const files = (await readdir(BRIEFS_DIR)).filter((f) => f.endsWith(".json"));

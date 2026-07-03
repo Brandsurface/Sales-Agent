@@ -46,8 +46,22 @@ Alle briefs gemmes i `/briefs` som både `.json` (fuld data) og `.md` (klar til 
 4. Brief'en gemmes lokalt og vises i UI'et/CLI'en. I CSV-batch-tilstand printes til sidst en rangeret
    ringeliste (bedste fit + confidence øverst).
 
-Modellerne kan ændres via `ANTHROPIC_RESEARCH_MODEL` / `ANTHROPIC_BRIEF_MODEL` i `.env`, hvis du fx vil
-bruge en billigere model til research-fasen ved høj volumen.
+## Model og omkostningsstyring
+
+Standardmodeller/max-tokens sættes via `.env` (`ANTHROPIC_RESEARCH_MODEL`, `ANTHROPIC_BRIEF_MODEL`,
+`ANTHROPIC_RESEARCH_MAX_TOKENS`, `ANTHROPIC_BRIEF_MAX_TOKENS`), men kan også overstyres **pr. kørsel**
+uden at genstarte serveren:
+
+- **Web-UI:** åbn "Avancerede indstillinger" i formularen - vælg model (Opus/Sonnet/Haiku) og sæt
+  max tokens for hver af de to faser.
+- **CLI:** `--model claude-haiku-4-5 --max-tokens 12000 --brief-max-tokens 6000`
+
+Brug fx Haiku 4.5 til at teste hele flowet billigt, før du kører rigtige leads på Opus.
+
+Hvis strukturerings-fasen fejler (fx fordi svaret bliver skåret af), prøver den automatisk igen med
+dobbelt så mange tokens. Fejler det stadig, går det allerede betalte research-memo **ikke tabt** - det
+gemmes som en `.raw.md`-fil i `/briefs` og vises direkte i UI'et/CLI'en med en advarsel, i stedet for
+bare at give en fejl og intet resultat.
 
 ## Begrænsninger (v1)
 

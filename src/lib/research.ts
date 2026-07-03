@@ -1,5 +1,10 @@
-import type Anthropic from "@anthropic-ai/sdk";
-import { getClient, RESEARCH_MODEL } from "./anthropic.js";
+import type {
+  ContentBlock,
+  Message,
+  MessageParam,
+  TextBlock,
+} from "@anthropic-ai/sdk/resources/messages/messages";
+import { getClient, RESEARCH_MODEL, DEFAULT_RESEARCH_MAX_TOKENS } from "./anthropic.js";
 import { researchSystemPrompt } from "./prompts.js";
 import type { RegistryInfo, ResearchInput } from "./types.js";
 
@@ -16,12 +21,20 @@ export interface ResearchResult {
  * the server-side search loop pauses after its internal iteration cap and must be
  * resumed by resending the conversation, per Anthropic's tool-use docs.
  */
+export interface ResearchOptions {
+  model?: string;
+  maxTokens?: number;
+  onProgress?: (text: string) => void;
+}
+
 export async function runDeepResearch(
   input: ResearchInput,
   registration: RegistryInfo | null,
-  onProgress?: (text: string) => void
+  options: ResearchOptions = {}
 ): Promise<ResearchResult> {
   const client = getClient();
+  const model = options.model || RESEARCH_MODEL;
+  const maxTokens = options.maxTokens || DEFAULT_RESEARCH_MAX_TOKENS;
 
   const registrationBlock = registration
     ? `\n\nCompany registration data already found on the company's own website (trust this, no need to re-find it):\n${JSON.stringify(registration, null, 2)}`
@@ -37,15 +50,15 @@ ${input.notes ? `Additional notes from the sales rep: ${input.notes}` : ""}${reg
 
 Dig deep. Find concrete, current, cited signals per the taxonomy in your instructions.`;
 
-  let messages: Anthropic.MessageParam[] = [{ role: "user", content: userPrompt }];
-  let finalMessage: Anthropic.Message | null = null;
+  let messages: MessageParam[] = [{ role: "user", content: userPrompt }];
+  let finalMessage: Message | null = null;
 
   const today = new Date().toISOString().slice(0, 10);
 
   for (let i = 0; i < MAX_PAUSE_CONTINUATIONS; i++) {
     const stream = client.messages.stream({
-      model: RESEARCH_MODEL,
-      max_tokens: 24000,
+      model,
+      max_tokens: maxTokens,
       system: researchSystemPrompt(today),
       thinking: { type: "adaptive" },
       output_config: { effort: "xhigh" },
@@ -56,8 +69,8 @@ Dig deep. Find concrete, current, cited signals per the taxonomy in your instruc
       messages,
     });
 
-    if (onProgress) {
-      stream.on("text", (delta) => onProgress(delta));
+    if (options.onProgress) {
+      stream.on("text", (delta: string) => options.onProgress!(delta));
     }
 
     finalMessage = await stream.finalMessage();
@@ -78,7 +91,7 @@ Dig deep. Find concrete, current, cited signals per the taxonomy in your instruc
   }
 
   const memo = finalMessage.content
-    .filter((block): block is Anthropic.TextBlock => block.type === "text")
+    .filter((block: ContentBlock): block is TextBlock => block.type === "text")
     .map((block) => block.text)
     .join("\n\n");
 
