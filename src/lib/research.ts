@@ -4,11 +4,14 @@ import type {
   MessageParam,
   TextBlock,
 } from "@anthropic-ai/sdk/resources/messages/messages";
-import { getClient, RESEARCH_MODEL, DEFAULT_RESEARCH_MAX_TOKENS } from "./anthropic.js";
+import { getClient, RESEARCH_MODEL, DEFAULT_RESEARCH_MAX_TOKENS, logUsage } from "./anthropic.js";
 import { researchSystemPrompt } from "./prompts.js";
 import type { RegistryInfo, ResearchInput } from "./types.js";
 
-const MAX_PAUSE_CONTINUATIONS = 5;
+// Capped at 3 rather than higher: each pause_turn continuation resends the whole
+// accumulated history and pays for a fresh round of thinking + tool calls, so this bounds
+// the worst-case cost of one research run instead of letting it retry indefinitely.
+const MAX_PAUSE_CONTINUATIONS = 3;
 
 export interface ResearchResult {
   memo: string;
@@ -59,12 +62,19 @@ Dig deep. Find concrete, current, cited signals per the taxonomy in your instruc
     const stream = client.messages.stream({
       model,
       max_tokens: maxTokens,
+      // Auto-places on the last cacheable block, so a pause_turn continuation reuses the
+      // already-processed history (system prompt + prior search/fetch results) at the
+      // cheap cache-read rate instead of paying full input price for it again.
+      cache_control: { type: "ephemeral" },
       system: researchSystemPrompt(today),
       thinking: { type: "adaptive" },
-      output_config: { effort: "xhigh" },
+      // "high" rather than "xhigh": xhigh is meant for the hardest coding/agentic tasks and
+      // meaningfully increases thinking + tool-call volume (and therefore cost) for a task
+      // this size. Bump back up if research quality genuinely needs it.
+      output_config: { effort: "high" },
       tools: [
-        { type: "web_search_20260209", name: "web_search", max_uses: 10 },
-        { type: "web_fetch_20260209", name: "web_fetch", max_uses: 6 },
+        { type: "web_search_20260209", name: "web_search", max_uses: 6 },
+        { type: "web_fetch_20260209", name: "web_fetch", max_uses: 4 },
       ],
       messages,
     });
@@ -74,8 +84,16 @@ Dig deep. Find concrete, current, cited signals per the taxonomy in your instruc
     }
 
     finalMessage = await stream.finalMessage();
+    logUsage(`research iteration ${i + 1} (stop=${finalMessage.stop_reason})`, model, finalMessage.usage);
 
     if (finalMessage.stop_reason !== "pause_turn") break;
+
+    if (i === MAX_PAUSE_CONTINUATIONS - 1) {
+      console.warn(
+        `Research hit pause_turn ${MAX_PAUSE_CONTINUATIONS} times in a row for "${input.companyName}" - ` +
+          "stopping here rather than continuing indefinitely; the memo below is what it had so far."
+      );
+    }
 
     messages = [...messages, { role: "assistant", content: finalMessage.content }];
   }

@@ -1,5 +1,5 @@
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { getClient, BRIEF_MODEL, DEFAULT_BRIEF_MAX_TOKENS } from "./anthropic.js";
+import { getClient, BRIEF_MODEL, DEFAULT_BRIEF_MAX_TOKENS, logUsage } from "./anthropic.js";
 import { structuringSystemPrompt } from "./prompts.js";
 import { BriefSchema, type Brief, type RegistryInfo, type ResearchInput } from "./types.js";
 
@@ -30,6 +30,8 @@ async function callStructuring(
       },
     ],
   });
+
+  logUsage(`structuring (stop=${response.stop_reason})`, model, response.usage);
 
   if (response.stop_reason === "max_tokens") {
     throw new Error(`Structuring output was cut off at max_tokens=${maxTokens} before finishing.`);

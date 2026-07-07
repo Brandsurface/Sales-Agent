@@ -70,6 +70,16 @@ dobbelt så mange tokens. Fejler det stadig, går det allerede betalte research-
 gemmes som en `.raw.md`-fil i `/briefs` og vises direkte i UI'et/CLI'en med en advarsel, i stedet for
 bare at give en fejl og intet resultat.
 
+**Hvad koster et research-kald?** Hver Claude-kald logger faktisk token-forbrug + et omtrentligt
+dollar-estimat i serverens terminal (`[usage] research iteration 1 (stop=end_turn) (claude-opus-4-8):
+input=... output=... ~$0.42`), så du kan se præcis hvor pengene går - og om et kald genstarter
+("pause_turn") flere gange, hvilket er den primære ting der kan gøre et Opus-kald dyrt. Der er indbygget
+et par ting der holder dette i skak: research-kaldet caches (`cache_control`) så en genstart genbruger
+allerede-behandlet historik i stedet for at betale fuld pris igen, kører på `effort: "high"` i stedet for
+`"xhigh"` (markant billigere, stadig grundig), har lavere lofter for antal søgninger/hentninger pr. kald,
+og stopper efter maks. 3 genstarter i stedet for at blive ved. Vil du ned i pris med det samme: vælg
+Sonnet 5 eller Haiku 4.5 under "Avancerede indstillinger", eller test gratis med Gemini.
+
 ## Gemini som gratis test-udbyder
 
 Til at teste selve flowet uden at bruge Claude-credits kan du bruge Google Gemini (gratis tier):

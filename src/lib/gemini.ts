@@ -80,6 +80,8 @@ Dig deep. Find concrete, current, cited signals per the taxonomy in your instruc
     },
   });
 
+  console.log(`[usage] gemini research (${model}):`, response.usageMetadata);
+
   const text = response.text;
   if (!text || !text.trim()) {
     throw new Error("Gemini research call returned no text content.");
@@ -122,6 +124,8 @@ async function callStructuringGemini(
       thinkingConfig: { thinkingBudget: 0 },
     },
   });
+
+  console.log(`[usage] gemini structuring (${model}):`, response.usageMetadata);
 
   if (response.candidates?.[0]?.finishReason === "MAX_TOKENS") {
     throw new Error(`Structuring output was cut off at max_tokens=${maxOutputTokens} before finishing.`);
