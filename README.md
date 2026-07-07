@@ -32,6 +32,10 @@ npm run research -- --csv leads.csv
 
 Alle briefs gemmes i `/briefs` som både `.json` (fuld data) og `.md` (klar til at kopiere ind i CRM/noter).
 
+I web-UI'et kan du desuden downloade en flot, printvenlig "sales dossier"-udgave af briefen som en
+selvstændig HTML-fil, eller trykke "Print / Gem som PDF" for at åbne browserens print-dialog og gemme
+den som PDF - god til at have i hånden eller på skærmen lige før opkaldet.
+
 ## Hvordan det virker
 
 1. **Registreringsopslag** (best-effort, virker på tværs af lande): hjemmesiden (URL'en du giver) hentes,

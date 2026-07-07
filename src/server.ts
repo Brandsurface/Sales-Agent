@@ -58,7 +58,7 @@ type StreamEvent =
   | { type: "phase"; phase: "registration" | "research" | "structuring" }
   | { type: "delta"; text: string }
   | { type: "note"; text: string }
-  | { type: "done"; id: string; brief: Brief; markdown: string; memo: string }
+  | { type: "done"; id: string; brief: Brief; markdown: string; memo: string; researchedAt: string }
   | { type: "warning"; id: string; memo: string; warning: string }
   | { type: "error"; error: string };
 
@@ -178,7 +178,7 @@ app.post("/api/research", async (req, res) => {
       const markdown = renderBriefMarkdown(brief, researchedAt);
       const saved = await saveBrief(brief, markdown);
 
-      writeEvent(res, { type: "done", id: saved.id, brief, markdown, memo });
+      writeEvent(res, { type: "done", id: saved.id, brief, markdown, memo, researchedAt });
     } catch (structuringErr) {
       // Research succeeded (and was paid for) even though structuring failed - never
       // discard the memo, so the rep still gets something for the spend.
